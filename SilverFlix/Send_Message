@@ -1,0 +1,96 @@
+import pandas as pd
+from datetime import datetime
+import pywhatkit
+import time
+
+def disparar_whatsapp():
+    caminho_planilha = 'clientes_silverflix.xlsx'
+    
+    try:
+        # 1. Lê a planilha Excel
+        print("Lendo a base de dados...")
+        df = pd.read_excel(caminho_planilha)
+        
+        # 2. Converte a coluna de vencimento para formato de data
+        df['Data de Vencimento'] = pd.to_datetime(df['Data de Vencimento'], dayfirst=True).dt.date
+        
+        # 3. Obtém a data de hoje
+        hoje = datetime.now().date()
+        dias_para_avisar = [5, 3, 1]
+        mensagens_enviadas = 0
+
+        if df.empty:
+            print("A planilha está vazia.")
+            return
+
+        print("Verificando vencimentos...\n")
+
+        # 4. Itera sobre cada linha da planilha
+        for index, cliente in df.iterrows():
+            nome = str(cliente['Nome']).strip()
+            celular = str(cliente['Celular']).strip()
+            plano = str(cliente['Plano']).strip()
+
+
+            data_vencimento = cliente['Data de Vencimento']
+            
+            # Validação básica para pular linhas vazias ou com datas inválidas
+            if pd.isna(data_vencimento):
+                continue
+                
+            # Calcula a diferença de dias
+            diferenca_dias = (data_vencimento - hoje).days
+            
+            # 5. Verifica se está no prazo de aviso (5, 3 ou 1 dia)
+            if diferenca_dias in dias_para_avisar:
+                data_formatada = data_vencimento.strftime('%d/%m/%Y')
+                
+                # Tratamento do número de telefone (Adiciona +55 se for número brasileiro sem DDI)
+                # Remove espaços, traços ou parênteses que possam ter vindo do Excel
+                celular_limpo = ''.join(c for c in celular if c.isdigit() or c == '+')
+                if not celular_limpo.startswith('+'):
+                    celular_limpo = f"+55{celular_limpo}"
+
+                # 6. Monta a mensagem final
+                mensagem = (f"Caro(a), {nome} seu plano {plano} expira em {diferenca_dias} dias. "
+                            f"Vencimento dia {data_formatada}, entre em contato para renovação. "
+                            f"Caso já tenha renovado desconsidere essa mensagem, SilverFlix agradece a preferencia")
+                
+                print(f"Preparando envio para: {nome} | Dias restantes: {diferenca_dias} | Número: {celular_limpo}")
+                
+                try:
+                    # 7. Dispara a mensagem via WhatsApp Web
+                    # wait_time=15: Tempo para o WhatsApp Web carregar no navegador
+                    # tab_close=True: Fecha a aba após o envio para não acumular abas abertas
+                    # close_time=3: Tempo que espera após enviar para fechar a aba
+                    pywhatkit.sendwhatmsg_instantly(
+                        phone_no=celular_limpo, 
+                        message=mensagem, 
+                        wait_time=15, 
+                        tab_close=True, 
+                        close_time=3
+                    )
+                    
+                    mensagens_enviadas += 1
+                    print("✅ Mensagem enviada com sucesso!")
+                    
+                    # Pausa de 10 segundos entre os envios para evitar banimento pelo sistema anti-spam do WhatsApp
+                    print("Aguardando 10 segundos para o próximo envio...\n")
+                    time.sleep(10)
+                    
+                except Exception as e:
+                    print(f"❌ Erro ao enviar mensagem para {nome}: {e}\n")
+                
+        print(f"Processo concluído! Total de {mensagens_enviadas} mensagem(ns) enviada(s) hoje.")
+
+    except FileNotFoundError:
+        print(f"❌ Erro: O arquivo '{caminho_planilha}' não foi encontrado na mesma pasta do script.")
+    except KeyError as e:
+        print(f"❌ Erro: A coluna {e} não foi encontrada na sua planilha. Verifique a grafia exata.")
+    except Exception as e:
+        print(f"❌ Ocorreu um erro crítico: {e}")
+
+if __name__ == "__main__":
+    disparar_whatsapp()
+
+    

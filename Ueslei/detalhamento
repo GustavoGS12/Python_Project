@@ -1,0 +1,95 @@
+import pandas as pd
+import instaloader
+import time
+
+def analisar_perfis_instagram(arquivo_entrada, arquivo_saida):
+    # 1. Inicializa o Instaloader
+    L = instaloader.Instaloader()
+    
+    # Opcional: Se os perfis forem privados ou o Instagram bloquear muito rápido, 
+    # você pode precisar fazer login descomentando a linha abaixo:
+    # L.login("SEU_USUARIO", "SUA_SENHA")
+
+    print(f"Lendo a planilha: {arquivo_entrada}...")
+    
+    try:
+        # 2. Lê a planilha Excel
+        df = pd.read_excel(arquivo_entrada)
+    except FileNotFoundError:
+        print(f"Erro: O arquivo '{arquivo_entrada}' não foi encontrado.")
+        return
+
+    # Assume que a primeira coluna tem os nomes de usuário (ex: @neymarjr ou apenas neymarjr)
+    nome_coluna_perfis = df.columns[0]
+    
+    # Listas para guardar os novos dados
+    lista_seguidores = []
+    lista_postagens = []
+    lista_seguindo = []
+
+    print("-" * 30)
+    # 3. Percorre cada perfil da primeira coluna
+    for index, linha in df.iterrows():
+        perfil_bruto = str(linha[nome_coluna_perfis]).strip()
+        
+        # Remove o '@' caso o usuário tenha colocado na planilha
+        username = perfil_bruto.replace('@', '')
+        
+        if not username or username.lower() == 'nan':
+            lista_seguidores.append("Vazio")
+            lista_postagens.append("Vazio")
+            lista_seguindo.append("Vazio")
+            continue
+
+        print(f"Analisando perfil: {username} ({index + 1}/{len(df)})...")
+        
+        try:
+            # Busca os dados do perfil
+            profile = instaloader.Profile.from_username(L.context, username)
+            
+            lista_seguidores.append(profile.followers)
+            lista_postagens.append(profile.mediacount)
+            lista_seguindo.append(profile.followees)
+            
+            print(f"  -> Sucesso: {profile.followers} seg | {profile.mediacount} posts")
+            
+        except instaloader.exceptions.ProfileNotExistsException:
+            print(f"  -> Erro: Perfil '{username}' não existe.")
+            lista_seguidores.append("Não encontrado")
+            lista_postagens.append("Não encontrado")
+            lista_seguindo.append("Não encontrado")
+            
+        except Exception as e:
+            print(f"  -> Erro ao acessar '{username}': {e}")
+            lista_seguidores.append("Erro de acesso/Bloqueio")
+            lista_postagens.append("Erro")
+            lista_seguindo.append("Erro")
+            
+        # 4. Pausa crucial para não ser bloqueado pelo Instagram
+        time.sleep(5) 
+
+    # 5. Adiciona as novas colunas ao DataFrame original
+
+
+    df['Seguidores'] = lista_seguidores
+
+    df['Postagens (Total)'] = lista_postagens
+    df['Seguindo'] = lista_seguindo
+    df['Reels'] = "Requer análise individual (risco de bloqueio)"
+
+    # 6. Salva o resultado em um novo arquivo Excel
+    df.to_excel(arquivo_saida, index=False)
+    print("-" * 30)
+    print(f"Análise concluída! Os resultados foram salvos em '{arquivo_saida}'.")
+
+# ==========================================
+# Configuração dos arquivos
+# ==========================================
+# Nome da sua planilha que tem os perfis na primeira coluna
+planilha_entrada = 'perfis.xlsx' 
+
+# Nome do arquivo que será gerado com as respostas
+planilha_saida = 'perfis_analisados.xlsx' 
+
+# Executa a função
+analisar_perfis_instagram(planilha_entrada, planilha_saida)
